@@ -68,10 +68,33 @@ export async function createPerk(req, res, next) {
   }
 }
 // TODO
-// Update an existing perk by ID and validate only the fields that are being updated 
+// Update an existing perk by ID and validate only the fields being updated
 export async function updatePerk(req, res, next) {
-  
+  try {
+    // Allow partial validation (only provided fields)
+    const updateSchema = perkSchema.fork(Object.keys(perkSchema.describe().keys), (field) =>
+      field.optional()
+    );
+
+    const { value, error } = updateSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.message });
+
+    const doc = await Perk.findByIdAndUpdate(
+      req.params.id,
+      { $set: value },
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) return res.status(404).json({ message: 'perk not found' });
+
+    res.json({ perk: doc });
+  } catch (err) {
+    if (err.code === 11000)
+      return res.status(409).json({ message: 'Duplicate perk for this merchant' });
+    next(err);
+  }
 }
+
 
 
 // Delete a perk by ID
@@ -82,3 +105,4 @@ export async function deletePerk(req, res, next) {
     res.json({ ok: true });
   } catch (err) { next(err); }
 }
+
