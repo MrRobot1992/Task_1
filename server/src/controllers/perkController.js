@@ -68,29 +68,43 @@ export async function createPerk(req, res, next) {
   }
 }
 // TODO
-// Update an existing perk by ID and validate only the fields being updated
 export async function updatePerk(req, res, next) {
   try {
-    // Allow partial validation (only provided fields)
-    const updateSchema = perkSchema.fork(Object.keys(perkSchema.describe().keys), (field) =>
-      field.optional()
+    // Make all fields optional for partial updates
+    const updateSchema = perkSchema.fork(
+      Object.keys(perkSchema.describe().keys),
+      (field) => field.optional()
     );
 
-    const { value, error } = updateSchema.validate(req.body);
+    // Validate without injecting defaults
+    const { value, error } = updateSchema.validate(req.body, {
+      stripUnknown: true,
+      noDefaults: true // 👈 prevents Joi from applying schema defaults
+    });
+
     if (error) return res.status(400).json({ message: error.message });
+
+    // Only update fields the client actually sent
+    const updateData = {};
+    for (const key of Object.keys(req.body)) {
+      if (value[key] !== undefined) {
+        updateData[key] = value[key];
+      }
+    }
 
     const doc = await Perk.findByIdAndUpdate(
       req.params.id,
-      { $set: value },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 
-    if (!doc) return res.status(404).json({ message: 'perk not found' });
+    if (!doc) return res.status(404).json({ message: 'Perk not found' });
 
     res.json({ perk: doc });
   } catch (err) {
-    if (err.code === 11000)
+    if (err.code === 11000) {
       return res.status(409).json({ message: 'Duplicate perk for this merchant' });
+    }
     next(err);
   }
 }
